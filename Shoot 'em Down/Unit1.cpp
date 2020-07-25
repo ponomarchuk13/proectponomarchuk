@@ -7,6 +7,7 @@
 #include <iostream.h>
 #include <fstream.h>
 #include <math.h>
+#include <string.h>
 
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
@@ -16,19 +17,26 @@ TForm1 *Form1;
 struct lvl_stats
 {
     int gamemode;
+    char *title; // description
+    TColor title_color; // color of level title
     int ammo; int duck_count;
     bool allow_gold_duck;
     int gold_duck_count;
+    int duck_speed; // length in pixels per tick
 };
-lvl_stats level[1];
-int ammo = 8;
+lvl_stats level[7];
+const int complete_levels = 1;
+int current_level = 1;
+
+int ammo;
 
 const int max_duck = 9;
 int kill_count = 0;
 int duck_count;
 
 struct duck_stat
-{   int x; int y; int dir;
+{   int dirX; // 0 - left, 1 - right
+    int dirY; // 0 - down, 1 - up
     bool can_hit; };
 duck_stat duck[max_duck];
 
@@ -36,31 +44,30 @@ struct img_duck
 {   TImage *image; };
 img_duck duck_img[max_duck];
 
+bool on_pause = false;
+
+
 //---------------------------------------------------------------------------
 void file_read(char *filename, lvl_stats *level, int lvl_id)
 {
     ifstream f(filename);
 
-    f>>level[lvl_id].gamemode;
-    if (level[lvl_id].gamemode>0) //1 - easy, 2 - medium, 3 - hard, 4 - insane
+    //f>>level[lvl_id].gamemode; //========= do not reading a file
+    level[lvl_id].gamemode = 1;
+
+    if (level[lvl_id].gamemode>0) // 1 - easy, 2 - medium, 3 - hard, 4 - insane
     {
-        if (level[lvl_id].gamemode == 5) //HARDCORE => insane speed + one shot-one kill
-        {
-
-        }
-        else // more than 6 => custom difficulty
-        {
-            f>>level[lvl_id].duck_count>>level[lvl_id].ammo;
-
-            f>>level[lvl_id].allow_gold_duck; //if gold duck allowed, next value is number of ducks, else next
-            if (level[lvl_id].allow_gold_duck) f>>level[lvl_id].gold_duck_count;
-        }
-        switch (level[lvl_id].gamemode)
+        switch (level[lvl_id].gamemode) // 1-5 => default presets
         {
             case 1:
             {
-                level[lvl_id].duck_count = 5;
+                level[lvl_id].title = "Easy mode";
+                level[lvl_id].title_color = 0x60FF00; // HEX RGB color palette
+                level[lvl_id].duck_count = 8;
                 level[lvl_id].ammo = 16;
+                level[lvl_id].allow_gold_duck = true;
+                level[lvl_id].gold_duck_count = 1;
+                level[lvl_id].duck_speed = 6; // length in pixels per tick
                 break;
             }
             case 2:
@@ -74,6 +81,24 @@ void file_read(char *filename, lvl_stats *level, int lvl_id)
             case 4:
             {
 
+            }
+            case 5: // HARDCORE => insane speed + one shot-one kill
+            {
+                level[lvl_id].title = "HARDCORE";
+                level[lvl_id].title_color = 0xFF8080; // HEX RGB color palette
+                level[lvl_id].duck_count = 32;
+                level[lvl_id].ammo = 32;
+                level[lvl_id].allow_gold_duck = false;
+                level[lvl_id].gold_duck_count = 0;
+                level[lvl_id].duck_speed = 20; // length in pixels per tick
+                break;
+            }
+            default:     // more than 6 => custom difficulty
+            {
+                f>>level[lvl_id].duck_count>>level[lvl_id].ammo;
+
+                f>>level[lvl_id].allow_gold_duck; //if gold duck allowed, next value is number of ducks, else next
+                if (level[lvl_id].allow_gold_duck) f>>level[lvl_id].gold_duck_count;
             }
         }
     }
@@ -90,25 +115,38 @@ __fastcall TForm1::TForm1(TComponent* Owner)
     : TForm(Owner)
 {
     DoubleBuffered = true;
-    Screen->Cursors[crNoDrop] = LoadCursorFromFile(".\\cursor\\RB-cross.cur");
+    randomize();
+    srand(time(NULL));
+    Screen->Cursors[crNoDrop] = LoadCursorFromFile(".\\cursor\\X-cross.cur");
     Screen->Cursor = crNoDrop;
 
     for (int i=0; i<max_duck; i++)
     {
         duck[i].can_hit = true;
-        duck[i].dir = 0; //0 = left, 1 = right;
+        duck[i].dirX = 1; // 0 = left, 1 = right;
+        duck[i].dirY = 1; // 0 = down, 1 = up;
     }
 
-    duck_img[0].image = img_duck1;
-    duck_img[1].image = img_duck2;
-    duck_img[2].image = img_duck3;
-    duck_img[3].image = img_duck4;
-    duck_img[4].image = img_duck5;
-    duck_img[5].image = img_duck6;
-    duck_img[6].image = img_duck7;
-    duck_img[7].image = img_duck8;
-    duck_img[8].image = img_golden_duck;
+    duck_img[1].image = img_duck1;
+    duck_img[2].image = img_duck2;
+    duck_img[3].image = img_duck3;
+    duck_img[4].image = img_duck4;
+    duck_img[5].image = img_duck5;
+    duck_img[6].image = img_duck6;
+    duck_img[7].image = img_duck7;
+    duck_img[8].image = img_duck8;
+    duck_img[9].image = img_golden_duck;
 
+    for (int i=1; i<=complete_levels; i++)
+    {
+        char *id, *lvl;
+        AnsiString a = IntToStr(i);
+        id = a.c_str();
+        lvl = strcat(".\\levels\\level_", id);
+        file_read(".\\levels\\level_1", level, i); // file_read doesn't read the file
+    }
+
+    ammo = level[current_level].ammo;
 }
 //---------------------------------------------------------------------------
 void change_image(TImage *img, TImageList *list, int image_id)
@@ -128,6 +166,7 @@ void ammo_update()
     }
     else change_image(Form1->img_ammo, Form1->bullet_list, ammo);
 }
+//------------------------------------
 void miss()
 {
     ammo--;
@@ -137,7 +176,7 @@ void miss()
     }
     Form1->ammo_count->Caption = IntToStr(ammo);
 }
-
+//------------------------------------
 void duck_kill(TImage *image, int duckID)
 {
     miss();
@@ -145,17 +184,24 @@ void duck_kill(TImage *image, int duckID)
     {
         //image->Visible = false;
         duck[duckID].can_hit = false; kill_count++;
-        change_image(image, Form1->duck_list, duck[duckID].dir+2);
+        change_image(image, Form1->duck_list, duck[duckID].dirX+2);
         Form1->lable_kill_counter->Caption = "Ducks killed -- "+IntToStr(kill_count);
+        image->SendToBack(); Form1->img_sky_bg->SendToBack();
     }
 } // */
-
+//------------------------------------
 void duck_respawn(TImage *image, int duckID)
 {
     image->Visible = true;
     duck[duckID].can_hit = true;
 }
-
+//------------------------------------
+void objective_lable() // draw lable relatively center of lable and screen
+{
+    Form1->lable_objective->Font->Color = level[current_level].title_color;
+    Form1->lable_objective->Caption = level[current_level].title;
+    Form1->lable_objective->Left = (Form1->Width/2) - (Form1->lable_objective->Width/2);
+}
 //===========================================================================
 
 void __fastcall TForm1::img_sky_bgClick(TObject *Sender)
@@ -176,9 +222,46 @@ void __fastcall TForm1::ammo_countClick(TObject *Sender)
 }
 //---------------------------------------------------------------------------
 //===========================================================================
-
+void pause_game() // now you can make some tea between waves
+{
+    if (!on_pause)
+    {
+        Form1->duck_respawn->Enabled = false;
+        Form1->duck_timer->Enabled = false;
+        Form1->TIME->Enabled = false;
+        Form1->img_pause->BringToFront();
+        //change_image(Form1->img_pause, Form1->screen_list, 1);
+        Form1->img_pause->Visible = true;
+    }
+}
+void unpause_game() //...and continue "Shootin 'em down!"
+{
+    Form1->duck_respawn->Enabled = true;
+    Form1->duck_timer->Enabled = true;
+    Form1->TIME->Enabled = true;
+    Form1->img_pause->SendToBack();
+    Form1->img_pause->Visible = false;
+    //change_image(Form1->img_pause, Form1->screen_list, 0);
+}
+//---------------------------------------------------------------------------
+void __fastcall TForm1::img_pauseClick(TObject *Sender)
+{
+    unpause_game();
+}
+void __fastcall TForm1::FormKeyPress(TObject *Sender, char &Key)// pause the game!
+{
+    if (Key = 27) pause_game();
+}
+//===========================================================================
+//---------------------------------------------------------------------------
 void __fastcall TForm1::TIMETimer(TObject *Sender)
 {
+    srand(time(NULL)); // i hate ya, slow randomizer
+    Label1->Caption = IntToStr(0+random(100));
+    objective_lable();
+
+    if (!Form1->Active) pause_game(); // you need a break
+
     if (ammo>0)
     {
         ammo_update();
@@ -192,53 +275,54 @@ void __fastcall TForm1::TIMETimer(TObject *Sender)
         }
     }
 }
-//===========================================================================
 //---------------------------------------------------------------------------
+//===========================================================================
 
 void __fastcall TForm1::img_duck1Click(TObject *Sender)
-{
-    if (duck[0].can_hit) duck_kill(duck_img[0].image, 0);
-    else miss();
-}
-void __fastcall TForm1::img_duck2Click(TObject *Sender)
 {
     if (duck[1].can_hit) duck_kill(duck_img[1].image, 1);
     else miss();
 }
-void __fastcall TForm1::img_duck3Click(TObject *Sender)
+void __fastcall TForm1::img_duck2Click(TObject *Sender)
 {
     if (duck[2].can_hit) duck_kill(duck_img[2].image, 2);
     else miss();
 }
-void __fastcall TForm1::img_duck4Click(TObject *Sender)
+void __fastcall TForm1::img_duck3Click(TObject *Sender)
 {
     if (duck[3].can_hit) duck_kill(duck_img[3].image, 3);
     else miss();
 }
-void __fastcall TForm1::img_duck5Click(TObject *Sender)
+void __fastcall TForm1::img_duck4Click(TObject *Sender)
 {
     if (duck[4].can_hit) duck_kill(duck_img[4].image, 4);
     else miss();
 }
-void __fastcall TForm1::img_duck6Click(TObject *Sender)
+void __fastcall TForm1::img_duck5Click(TObject *Sender)
 {
     if (duck[5].can_hit) duck_kill(duck_img[5].image, 5);
     else miss();
 }
-void __fastcall TForm1::img_duck7Click(TObject *Sender)
+void __fastcall TForm1::img_duck6Click(TObject *Sender)
 {
     if (duck[6].can_hit) duck_kill(duck_img[6].image, 6);
     else miss();
 }
-void __fastcall TForm1::img_duck8Click(TObject *Sender)
+void __fastcall TForm1::img_duck7Click(TObject *Sender)
 {
     if (duck[7].can_hit) duck_kill(duck_img[7].image, 7);
     else miss();
 }
+void __fastcall TForm1::img_duck8Click(TObject *Sender)
+{
+    if (duck[8].can_hit) duck_kill(duck_img[8].image, 8);
+    else miss();
+}
+//===========================================================================
 //---------------------------------------------------------------------------
 void __fastcall TForm1::img_golden_duckClick(TObject *Sender)
 {
-    if (duck[8].can_hit)
+    if (duck[9].can_hit)
     {
         //miss();
         if (ammo>0)
@@ -255,12 +339,26 @@ void __fastcall TForm1::img_golden_duckClick(TObject *Sender)
 //---------------------------------------------------------------------------
 //===========================================================================
 
-/*void duck_move(TImage *img, const GraphicPoint &dest, int step, bool &need_move)
+void duck_quickmove(TImage *img, int step, bool &need_move, duck_stat *duck, int id)
 {
     int midX = img->Left + img->Width/2;
     int midY = img->Top + img->Height/2;
-    int dx = dest.x - midX;
-    int dy = dest.y - midY;
+    int destX, destY;
+
+    if (duck[id].dirX==1) destX = midX+60;
+    else destX = midX-60;
+    if (duck[id].dirY==1) destY = midY-40;
+    else destY = midY+30;
+
+    int dx = destX - midX;
+    int dy = destY - midY;
+    //   0-left 1-right
+    /*if (duck[id].dirX==1) dx = (midX-50) - midX; // move right
+    else dx = (midX+50) - midX;                   // move left
+    if (duck[id].dirX==0) dy = (midY-80) - midY; // move up
+    else dy = (midY+30) - midY; // */                  // move down
+
+    change_image(duck_img[id].image, Form1->duck_list, duck[id].dirX);
     if(abs(dx)<step && abs(dy)<step)
     {
         need_move = false;
@@ -270,7 +368,68 @@ void __fastcall TForm1::img_golden_duckClick(TObject *Sender)
     double angle = atan2(dy, dx);
     img->Left += step*cos(angle);
     img->Top += step*sin(angle);
-    //health->Left = img->Left+img->Width/2-health->Width/2;
-    //health->Top = img->Top+img->Height+10;
 } // */
+void duck_downmove(TImage *img, bool &need_move, duck_stat *duck, int id)
+{
+    if (img->Top >= 400)
+    {
+        need_move = false;
+        return;
+    }
+    need_move = true;
+    img->Top +=10;
+}
+void gold_duck_move(TImage *img, duck_stat *duck, int id)
+{
+//
+}
 //---------------------------------------------------------------------------
+void NextLevel()
+{
+    //Form1->duck_timer->Enabled = false;
+    ShowMessage("Congrats, u make it");
+
+}
+//---------------------------------------------------------------------------
+void __fastcall TForm1::duck_respawnTimer(TObject *Sender)
+{
+//
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TForm1::duck_timerTimer(TObject *Sender) // movin' ducks
+{
+    bool need_move;
+    srand(time(NULL));
+
+    if (kill_count >= level[current_level].duck_count)
+    {
+        kill_count = 0;
+        NextLevel();
+    }
+    for (int i=1; i<max_duck; i++)
+    {
+        //================ main move
+        if (duck[i].can_hit) duck_quickmove(duck_img[i].image, level[current_level].duck_speed, need_move, duck, i);
+        else duck_downmove(duck_img[i].image, need_move, duck, i);
+        //================ left and right borders
+        if (duck_img[i].image->Left+duck_img[i].image->Width >= 1100) duck[i].dirX = 0;
+        else if (duck_img[i].image->Left <= 100) duck[i].dirX = 1;
+        //================ up and down dorders
+        if (duck_img[i].image->Top >= 300) duck[i].dirY = 1;
+        else if (duck_img[i].image->Top <= 50) duck[i].dirY = 0;
+        //================ random direction change
+        if (random(10)==3)
+        {
+            duck[i].dirX = 0+random(2);
+        }
+        if (random(10)==9)
+        {
+            duck[i].dirY = 0+random(2); // does it even working?
+        }
+        // almost working move
+    }
+}
+//---------------------------------------------------------------------------
+
+
