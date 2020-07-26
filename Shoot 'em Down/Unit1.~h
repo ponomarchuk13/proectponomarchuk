@@ -24,7 +24,7 @@ __published:	// IDE-managed Components
     TImage *img_ammo;
     TImageList *bullet_list;
     TTimer *duck_timer;
-    TTimer *duck_respawn;
+    TTimer *ReSpawner;
     TTimer *TIME;
     TImageList *duck_list;
     TLabel *ammo_count;
@@ -36,8 +36,8 @@ __published:	// IDE-managed Components
     TImage *img_golden_duck;
     TImage *img_ammo2;
     TLabel *lable_objective;
-    TLabel *Label1;
     TImage *img_pause;
+    TLabel *label_aim;
     void __fastcall img_sky_bgClick(TObject *Sender);
     void __fastcall img_grass_bgClick(TObject *Sender);
     void __fastcall TIMETimer(TObject *Sender);
@@ -52,7 +52,7 @@ __published:	// IDE-managed Components
     void __fastcall img_duck7Click(TObject *Sender);
     void __fastcall img_duck8Click(TObject *Sender);
     void __fastcall img_golden_duckClick(TObject *Sender);
-    void __fastcall duck_respawnTimer(TObject *Sender);
+    void __fastcall ReSpawnerTimer(TObject *Sender);
     void __fastcall duck_timerTimer(TObject *Sender);
     void __fastcall img_pauseClick(TObject *Sender);
     void __fastcall FormKeyPress(TObject *Sender, char &Key);
