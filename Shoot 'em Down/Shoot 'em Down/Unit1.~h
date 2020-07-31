@@ -36,9 +36,10 @@ __published:	// IDE-managed Components
     TImage *img_golden_duck;
     TImage *img_ammo2;
     TLabel *lable_objective;
-    TLabel *Label1;
     TImage *img_pause;
     TLabel *label_aim;
+    TLabel *pause_label;
+    TLabel *pause_label2;
     void __fastcall img_sky_bgClick(TObject *Sender);
     void __fastcall img_grass_bgClick(TObject *Sender);
     void __fastcall TIMETimer(TObject *Sender);
